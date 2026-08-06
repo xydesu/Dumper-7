@@ -1493,6 +1493,32 @@ void CppGenerator::GenerateSDKHeader(StreamType& SdkHpp)
 
 	PackageManager::IterateDependencies(ForEachElementCallback);
 
+	if constexpr (!Settings::CppGenerator::bIncludeParameterStructsInIDA)
+	{
+		// Causes param structs not to be included when importing the SDK, but still keeps them in SDK.hpp.
+		SdkHpp << R"(
+#ifdef IMPORT_CPP_SDK_INTO_IDA
+	#define IMPORT_CPP_SDK_INTO_IDA_EXCLUDE_PARAMS
+#endif // IMPORT_CPP_SDK_INTO_IDA
+)";
+	}
+
+	// make available the parameter structs in IDA
+	SdkHpp << "#if defined(IMPORT_CPP_SDK_INTO_IDA) && !defined(IMPORT_CPP_SDK_INTO_IDA_EXCLUDE_PARAMS)\n";
+
+	auto ForEachElementCallbackForParams = [&SdkHpp](const PackageManagerIterationParams& OldParams, const PackageManagerIterationParams& NewParams, bool bIsStruct) -> void
+	{
+		PackageInfoHandle CurrentPackage = PackageManager::GetInfo(NewParams.RequiredPackage);
+
+		const bool bHasParameterStructs = CurrentPackage.HasParameterStructs();
+		if (!bIsStruct && bHasParameterStructs)
+			SdkHpp << std::format("#include \"SDK/{}_parameters.hpp\"\n", CurrentPackage.GetName());
+	};
+
+	PackageManager::IterateDependencies(ForEachElementCallbackForParams);
+
+	SdkHpp << "#endif // defined(IMPORT_CPP_SDK_INTO_IDA) && !defined(IMPORT_CPP_SDK_INTO_IDA_EXCLUDE_PARAMS)\n";
+
 
 	WriteFileEnd(SdkHpp, EFileType::SdkHpp);
 }
@@ -2536,6 +2562,43 @@ R"({
 		for (UField* Field = Clss->Children; Field; Field = Field->Next)
 		{
 			if(Field->HasTypeFlag(EClassCastFlags::Function) && Field->GetName() == FuncName)
+				return static_cast<class UFunction*>(Field);
+		}
+	}
+
+	return nullptr;
+})",
+			.bIsStatic = false, .bIsConst = true, .bIsBodyInline = false
+		},
+		PredefinedFunction {
+			.CustomComment = "Gets a UFunction from this UClasses' 'Children' list",
+			.ReturnType = "class UFunction*", .NameWithParams = "GetFunction(const FName& ClassName, const FName& FuncName)", .Body =
+R"({
+	for (const UStruct* Clss = this; Clss; Clss = Clss->SuperStruct)
+	{
+		if (Clss->Name != ClassName)
+			continue;
+
+		for (UField* Field = Clss->Children; Field; Field = Field->Next)
+		{
+			if (Field->HasTypeFlag(EClassCastFlags::Function) && Field->Name == FuncName)
+				return static_cast<class UFunction*>(Field);
+		}
+	}
+
+	return nullptr;
+})",
+			.bIsStatic = false, .bIsConst = true, .bIsBodyInline = false
+		},
+		PredefinedFunction {
+			.CustomComment = "Gets the first UFunction from the UClass inheritance hierarchy",
+			.ReturnType = "class UFunction*", .NameWithParams = "GetFunction(const FName& FuncName)", .Body =
+R"({
+	for (const UStruct* Clss = this; Clss; Clss = Clss->SuperStruct)
+	{
+		for (UField* Field = Clss->Children; Field; Field = Field->Next)
+		{
+			if (Field->HasTypeFlag(EClassCastFlags::Function) && Field->Name == FuncName)
 				return static_cast<class UFunction*>(Field);
 		}
 	}

@@ -43,6 +43,9 @@ namespace Settings
 		inline std::string GameVersion = "";
 
 		inline std::string SDKGenerationPath = "C:/Dumper-7";
+
+		/* Whether to use a timestamp suffix for backup folders instead of "_OLD", allowing unlimited backups */
+		inline bool bCreateUniqueBackups = false;
 	}
 
 	namespace CppGenerator
@@ -85,6 +88,11 @@ R"(
 
 		/* Adds the 'final' specifier to classes with no loaded child class at SDK-generation time. */
 		constexpr bool bAddFinalSpecifier = true;
+
+		//------------------------- For CppSDK import into IDA -------------------------//
+
+		/* Whether to include parameter structs when importing the SDK into IDA. */
+		constexpr bool bIncludeParameterStructsInIDA = true;
 	}
 
 	namespace MappingGenerator
@@ -167,7 +175,7 @@ R"(
 		/* Whether this games' engine version uses a contexpr flag to determine whether a FFieldVariant holds a UObject* or FField* */
 		inline bool bUseMaskForFieldOwner = false;
 
-		/* Whether this games' engine version uses double for FVector, instead of float. Aka, whether the engine version is UE5.0 or higher. */
+		/* Whether this game's engine version uses double for FVector, instead of float. Aka, whether the engine version is UE5.0 or higher. */
 		inline bool bUseLargeWorldCoordinates = false;
 
 		/* Whether this game uses uint8 for UEProperty::ArrayDim, instead of int32 */
