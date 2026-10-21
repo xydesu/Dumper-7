@@ -84,13 +84,12 @@ void StructManager::InitAlignmentsAndNames()
 
 		NewOrExistingInfo.Name = UniqueNameTable.FindOrAdd(CppName, !ObjAsStruct.IsA(EClassCastFlags::Function)).first;
 
-		// Interfaces inherit from UObject by default, but as a workaround to no virtual-inheritance we make them empty
 		if (ObjAsStruct.HasType(InterfaceClass))
 		{
-			NewOrExistingInfo.Alignment = 0x1;
+			NewOrExistingInfo.Alignment = sizeof(void*);
 			NewOrExistingInfo.bHasReusedTrailingPadding = false;
-			NewOrExistingInfo.bIsFinal = true;
-			NewOrExistingInfo.Size = 0x0;
+			NewOrExistingInfo.bIsFinal = false;
+			NewOrExistingInfo.Size = sizeof(void*);
 
 			continue;
 		}
@@ -166,23 +165,21 @@ void StructManager::InitSizesAndIsFinal()
 	const UEClass InterfaceClass = ObjectArray::FindClassFast("Interface");
 
 	// Reuse cached struct list from InitAlignmentsAndNames
-	for (const auto& [Index, Info] : StructInfoOverrides)
+	for (auto& [Index, Info] : StructInfoOverrides)
 	{
 		UEStruct ObjAsStruct = ObjectArray::GetByIndex<UEStruct>(Index);
 		
 		if (ObjAsStruct.HasType(InterfaceClass))
 			continue;
 
-		StructInfo& NewOrExistingInfo = StructInfoOverrides[Index];
-
 		// Initialize struct-size if it wasn't set already
-		if (NewOrExistingInfo.Size > ObjAsStruct.GetStructSize())
-			NewOrExistingInfo.Size = ObjAsStruct.GetStructSize();
+		if (Info.Size > ObjAsStruct.GetStructSize())
+			Info.Size = ObjAsStruct.GetStructSize();
 
 		UEStruct Super = ObjAsStruct.GetSuper();
 
-		if (NewOrExistingInfo.Size == 0x0 && Super != nullptr)
-			NewOrExistingInfo.Size = Super.GetStructSize();
+		if (Info.Size == 0x0 && Super != nullptr)
+			Info.Size = Super.GetStructSize();
 
 		int32 LastMemberEnd = 0x0;
 		int32 LowestOffset = INT_MAX;
@@ -200,8 +197,20 @@ void StructManager::InitSizesAndIsFinal()
 				LastMemberEnd = PropertyOffset + PropertySize;
 		}
 
+		if (ObjAsStruct.IsA(EClassCastFlags::Class))
+		{
+			for (const FImplementedInterface& Iface : ObjAsStruct.Cast<UEClass>().GetImplementedInterfaces())
+			{
+				if (Iface.bImplementedByK2 || !Iface.InterfaceClass)
+					continue;
+
+				if (Iface.PointerOffset > 0 && Iface.PointerOffset < LowestOffset)
+					LowestOffset = Iface.PointerOffset;
+			}
+		}
+
 		/* No need to check any other structs, as finding the LastMemberEnd only involves this struct */
-		NewOrExistingInfo.LastMemberEnd = LastMemberEnd;
+		Info.LastMemberEnd = LastMemberEnd;
 
 		if (!Super || ObjAsStruct.IsA(EClassCastFlags::Function))
 			continue;
